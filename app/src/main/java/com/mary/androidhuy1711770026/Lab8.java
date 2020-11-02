@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CursorAdapter;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.ListView;
@@ -23,33 +24,36 @@ import java.util.List;
 import android.widget.TabHost;
 import android.app.TabActivity;
 import android.widget.AdapterView;
+import android.database.Cursor;
 
 
-public class Lab7 extends TabActivity {
+public class Lab8 extends TabActivity {
     RestaurantAdapter adapter = null;
-    List<Restaurant> listRestaurant = new ArrayList<Restaurant>();
+    Cursor curRestaurant = null;
+    RestaurantHelper helper = null;
+    //private List<Restaurant> listRestaurant = new ArrayList<Restaurant>();
 
-    private AdapterView.OnItemClickListener onListClick = new AdapterView.OnItemClickListener() {
+    private AdapterView.OnItemClickListener onItemClickListener = new AdapterView.OnItemClickListener() {
         @Override
         public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            Restaurant r = listRestaurant.get(position); // lấy item được chọn
+            curRestaurant.moveToPosition(position);
+
             EditText name;
             EditText address;
             RadioGroup types;
-// Tham chiếu đến các view trong details
+
             name = (EditText)findViewById(R.id.name);
             address = (EditText)findViewById(R.id.addr);
             types = (RadioGroup)findViewById(R.id.types);
-// thiết lập thông tin tương ứng
-            name.setText(r.getName());
-            address.setText(r.getAddress());
-            if (r.getType().equals("Sit down"))
+
+            name.setText(helper.getName(curRestaurant));
+            address.setText(helper.getAddress(curRestaurant));
+            if (helper.getType(curRestaurant).equals("Sit down"))
                 types.check(R.id.sit_down);
-            else if (r.getType().equals("Take out"))
+            else if (helper.getType(curRestaurant).equals("Take out"))
                 types.check(R.id.take_out);
             else
                 types.check(R.id.delivery);
-// sinh viên có thể bổ sung lệnh sau để chuyển view về tab details
             getTabHost().setCurrentTab(1);
         }
     };
@@ -57,15 +61,20 @@ public class Lab7 extends TabActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.lab7);
+        setContentView(R.layout.lab8);
+        helper = new RestaurantHelper(this);
 
-        Button save = (Button)findViewById(R.id.save); // tham chiếu đến Button
-        save.setOnClickListener(onSave); // khai báo listener cho Button
+        Button save = (Button)findViewById(R.id.save);
+        save.setOnClickListener(onSave);
 
         ListView list = (ListView)findViewById(R.id.restaurants);
-        adapter = new RestaurantAdapter();
+        list.setOnItemClickListener(onItemClickListener);
+
+
+        curRestaurant = helper.getAll();
+        startManagingCursor(curRestaurant);
+        adapter = new RestaurantAdapter(curRestaurant);
         list.setAdapter(adapter);
-        list.setOnItemClickListener(onListClick);
 
         TabHost.TabSpec spec = getTabHost().newTabSpec("tag1");
         spec.setContent(R.id.restaurants);
@@ -73,75 +82,77 @@ public class Lab7 extends TabActivity {
         getTabHost().addTab(spec);
         spec = getTabHost().newTabSpec("tag2");
         spec.setContent(R.id.details);
-        spec.setIndicator("Details",
-                getResources().getDrawable(R.drawable.restaurant));
+        spec.setIndicator("Details", getResources().getDrawable(R.drawable.restaurant));
         getTabHost().addTab(spec);
         getTabHost().setCurrentTab(0);
     }
 
-
+    protected void onDestroy() {
+        super.onDestroy();
+        helper.close();
+    }
 
     private View.OnClickListener onSave = new View.OnClickListener() {
         public void onClick(View v) {
-            Restaurant r = new Restaurant();
+            Restaurant restaurant = new Restaurant();
 
             EditText name = (EditText)findViewById(R.id.name);
             EditText address = (EditText)findViewById(R.id.addr);
 
-            r.setName(name.getText().toString());
-            r.setAddress(address.getText().toString());
-            RadioGroup type = (RadioGroup)findViewById(R.id.types);
+            restaurant.setName(name.getText().toString());
+            restaurant.setAddress(address.getText().toString());
 
+            RadioGroup type = (RadioGroup)findViewById(R.id.types);
 
             switch (type.getCheckedRadioButtonId())
             {
                 case R.id.take_out:
-                    r.setType("Take out");
+                    restaurant.setType("Take out");
                     Toast.makeText(v.getContext(), name.getText().toString() + " " + address.getText().toString() + " " + "Take out" ,Toast.LENGTH_SHORT).show();
                     break;
                 case R.id.sit_down:
-                    r.setType("Sit down");
+                    restaurant.setType("Sit down");
                     Toast.makeText(v.getContext(), name.getText().toString() + " " + address.getText().toString() + " " + "Sit down" ,Toast.LENGTH_SHORT).show();
                     break;
                 case R.id.delivery:
-                    r.setType("Delivery");
+                    restaurant.setType("Delivery");
                     Toast.makeText(v.getContext(), name.getText().toString() + " " + address.getText().toString() + " " + "Delivery" ,Toast.LENGTH_SHORT).show();
                     break;
             }
             //restaurantList.add(r);
-            listRestaurant.add(r);
-
+            //listRestaurant.add(restaurant);
+            helper.insert(restaurant.getName(), restaurant.getAddress(), restaurant.getType());
+            curRestaurant.requery();
         }
     };
 
-    class RestaurantAdapter extends ArrayAdapter<Restaurant>
+    class RestaurantAdapter extends CursorAdapter
     {
-        public RestaurantAdapter(Context context,int textViewResourceld){
-            super(context,textViewResourceld);
-        }
-        public RestaurantAdapter()
+        public RestaurantAdapter(Cursor c)
         {
-            super(Lab7.this,android.R.layout.simple_list_item_1,listRestaurant);
+            super(Lab8.this, c);
         }
-        public View getView(int position, View convertView, ViewGroup parent){
-            View row = convertView;
-            if(row == null){
-                LayoutInflater inflater = getLayoutInflater();
-                row = inflater.inflate(R.layout.row,null);
-            }
-            Restaurant r = listRestaurant.get(position);
-
-            ((TextView)row.findViewById(R.id.title)).setText(r.getName());
-            ((TextView)row.findViewById(R.id.title)).setText(r.getAddress());
+        public RestaurantAdapter(Context context, Cursor c) {
+            super(context, c);
+        }
+        @Override
+        public void bindView(View view, Context context, Cursor cursor) {
+            View row = view;
+            ((TextView)row.findViewById(R.id.title)).setText(helper.getName(cursor));
+            ((TextView)row.findViewById(R.id.address)).setText(helper.getAddress(cursor));
             ImageView icon = (ImageView)row.findViewById(R.id.icon);
-
-            String type = r.getType();
-            if(type.equals("Take out"))
+            String type = helper.getType(cursor);
+            if (type.equals("Take out"))
                 icon.setImageResource(R.drawable.icon_t);
-            else if(type.equals("Sit down"))
+            else if (type.equals("Sit down"))
                 icon.setImageResource(R.drawable.icon_s);
             else
                 icon.setImageResource(R.drawable.icon_d);
+        }
+        @Override
+        public View newView(Context context, Cursor cursor, ViewGroup parent) {
+            LayoutInflater inflater = getLayoutInflater();
+            View row = inflater.inflate(R.layout.row, parent, false);
             return row;
         }
     }
